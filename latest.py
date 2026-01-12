@@ -214,16 +214,16 @@ if tab == "📈 Trends":
     st.subheader("Scatter Plots for Key Variables")
 
     x = data['gdp']
-    y_employment = data['employment']
-    y_hours = data['hours']
-    y_output_hour = data['output_hour']
-    y_output_emp = data['output_employment']
+    sector_employment = data['employment']
+    sector_hours = data['hours']
+    sector_output_hour = data['output_hour']
+    sector_output_emp = data['output_employment']
 
     fig, axes = plt.subplots(1, 4, figsize=(20, 5))
 
     # GDP vs Employment
-    axes[0].scatter(x, y_employment, color='steelblue', alpha=0.6, label='Observed Data')
-    z = np.polyfit(x, y_employment, 1)
+    axes[0].scatter(x, sector_employment, color='steelblue', alpha=0.6, label='Observed Data')
+    z = np.polyfit(x, sector_employment, 1)
     p = np.poly1d(z)
     axes[0].plot(x, p(x), color='darkred', linestyle='--', linewidth=2, label='Linear Fit')
     axes[0].set_xlabel('GDP')
@@ -233,8 +233,8 @@ if tab == "📈 Trends":
     axes[0].grid(True, alpha=0.3)
 
     # GDP vs Total Working Hours
-    axes[1].scatter(x, y_hours, color='green', alpha=0.6, label='Observed Data')
-    z = np.polyfit(x, y_hours, 1)
+    axes[1].scatter(x, sector_hours, color='green', alpha=0.6, label='Observed Data')
+    z = np.polyfit(x, sector_hours, 1)
     p = np.poly1d(z)
     axes[1].plot(x, p(x), color='darkred', linestyle='--', linewidth=2, label='Linear Fit')
     axes[1].set_xlabel('GDP')
@@ -244,14 +244,14 @@ if tab == "📈 Trends":
     axes[1].grid(True, alpha=0.3)
 
     # GDP vs Output per Hour
-    axes[2].scatter(x, y_output_hour, color='orange', alpha=0.6, label='Observed Data')
+    axes[2].scatter(x, sector_output_hour, color='orange', alpha=0.6, label='Observed Data')
     axes[2].set_xlabel('GDP')
     axes[2].set_ylabel('Output per Hour')
     axes[2].set_title('GDP vs Output per Hour')
     axes[2].grid(True, alpha=0.3)
 
     # GDP vs Output per Employee
-    axes[3].scatter(x, y_output_emp, color='purple', alpha=0.6, label='Observed Data')
+    axes[3].scatter(x, sector_output_emp, color='purple', alpha=0.6, label='Observed Data')
     axes[3].set_xlabel('GDP')
     axes[3].set_ylabel('Output per Employee')
     axes[3].set_title('GDP vs Output per Employee')
@@ -385,5 +385,6 @@ if tab == "📝 Prediction":
 # ===============================
 st.markdown("---")
 st.caption("💡 Streamlit Dashboard | Employment Sector Prediction | Machine Learning")
+
 
 
