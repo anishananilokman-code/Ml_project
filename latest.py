@@ -1,439 +1,291 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.express as px
+import xgboost as xgb
 import seaborn as sns
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, LabelEncoder
-import xgboost as xgb
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import SVC
+from sklearn.metrics import accuracy_score, classification_report, mean_absolute_error, mean_squared_error
+from imblearn.over_sampling import SMOTE
+import plotly.express as px
 
-# ===============================
-# PAGE CONFIGURATION
-# ===============================
-st.set_page_config(
-    page_title="Employment Sector Prediction",
-    page_icon="🏢",
-    layout="wide"
-)
-
-# ===============================
-# BACKGROUND & STYLING
-# ===============================
-def apply_custom_styles():
-    st.markdown(
-        """
-        <style>
-        .stApp {
-            background-color: #f3f4f6;  /* Light background color */
-            color: black; /* Black text color */
-        }
-        .stButton>button {
-            background-color: #0073e6;
-            color: white;
-            font-weight: bold;
-            border-radius: 10px;
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
-            transition: background-color 0.3s ease;
-        }
-        .stButton>button:hover {
-            background-color: #005bb5;
-        }
-        .block-container {
-            background-color: rgba(255,255,255,0.92);
-            padding: 2rem;
-            border-radius: 15px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }
-        .stTextInput>label {
-            font-size: 1rem;
-        }
-        .stSelectbox, .stMultiselect {
-            background-color: #ffffff;
-            border-radius: 5px;
-        }
-        .stMetric>label {
-            font-size: 1.2rem;
-        }
-        .stSidebar {
-            background-color: #2b2d42;
-        }
-        .stSidebar .sidebar-content a {
-            color: #fff;
-        }
-        .stTitle, .stSubheader {
-            color: #0073e6;
-            font-family: 'Arial', sans-serif;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
-
-apply_custom_styles()
-
-# ===============================
-# MAIN TITLE
-# ===============================
-st.markdown("<h1 style='color: #0073e6;'>🏢 Employment Sector Prediction Dashboard</h1>", unsafe_allow_html=True)
-st.subheader("Predicting Employment Sectors based on Economic Indicators")
-st.caption("📊 GDP | 🏭 Productivity | 💼 Work Hours | 👥 Labor Force")
-
-# ===============================
-# DATA LOADING (Uploaded CSV file)
-# ===============================
+# Load and preprocess the data
 @st.cache_data
 def load_data():
-    data = pd.read_csv(r"clean_data.csv")  # Update the path to your dataset
-    # Ensure 'date' column exists and handle it properly
-    if 'date' in data.columns:
-        data['date'] = pd.to_datetime(data['date'], errors='coerce')  # Coerce invalid dates to NaT
+    data = pd.read_csv('clean_data.csv')  # Replace with your actual data path or upload method
+    data['date'] = pd.to_datetime(data['date'])
+
+    # Feature Engineering: Create necessary columns for model
+    data['output_per_hour'] = data['output_hour'] / data['hours']
+    data['GDP_per_worker'] = data['gdp'] / data['employment']
+    data['log_GDP'] = np.log(data['gdp'] + 1)  # Adding 1 to avoid log(0)
+    
+    # Calculating key indicators for employment distribution
+    data['employed_employer_percentage'] = data['employed_employer'] / data['employment'] * 100
+    data['employed_employee_percentage'] = data['employed_employee'] / data['employment'] * 100
+    data['employed_own_account_percentage'] = data['employed_own_account'] / data['employment'] * 100
+    data['employed_unpaid_family_percentage'] = data['employed_unpaid_family'] / data['employment'] * 100
+
+    # Handle any 'inf' or invalid values by replacing them with NaN
+    data.replace([np.inf, -np.inf], np.nan, inplace=True)
+    
+    # Handle NaN values: Fill NaN with column mean for numeric columns
+    numeric_data = data.select_dtypes(include=[np.number])  # Only numeric columns
+    data[numeric_data.columns] = numeric_data.fillna(numeric_data.mean())  # Fill NaN values in numeric columns
+
     return data
 
-data = load_data()
+# Save model using XGBoost (for XGBoost models, JSON format)
+def save_xgb_model(model, model_name="trained_xgb_model.json"):
+    model.save_model(model_name)
 
-# ===============================
-# Data Preprocessing
-# ===============================
+# Load model using XGBoost (for XGBoost models, JSON format)
+@st.cache_resource
+def load_xgb_model(model_name="trained_xgb_model.json"):
+    model = xgb.XGBClassifier()
+    model.load_model(model_name)
+    return model
+
+# Preprocess data: Scaling, Encoding, etc.
 def preprocess_data(data):
-    # Feature Engineering Example:
-    data['GDP_per_worker'] = data['gdp'] / data['employment']
-    data['output_per_hour'] = data['output_hour'] / data['hours']
-    data['log_GDP'] = np.log(data['gdp'] + 1)
-
-    # Label Encoding for sector (assuming sector is categorical)
+    # Label Encoding for sector (convert sector labels to numeric values)
     encoder = LabelEncoder()
-    data['sector'] = encoder.fit_transform(data['sector'])
-
-    # Handle Infinite and NaN Values
-    data.replace([np.inf, -np.inf], np.nan, inplace=True)  # Replace infinite values with NaN
-    data.fillna(data.mean(), inplace=True)  # Replace NaN values with the mean of each column
-
-    # Split data into features and target
-    X = data[['gdp', 'employment', 'hours', 'output_per_hour', 'GDP_per_worker', 'log_GDP']]
     y = data['sector']
-
-    # Split into training and test sets
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
-    # Scale the data
-    scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train)
-    X_test_scaled = scaler.transform(X_test)
-
-    return X_train_scaled, X_test_scaled, y_train, y_test, encoder, scaler
-
-X_train_scaled, X_test_scaled, y_train, y_test, encoder, scaler = preprocess_data(data)
-
-# ===============================
-# NAVIGATION (Sidebar)
-# ===============================
-st.sidebar.title("Navigation")
-tab = st.sidebar.radio("Go to", ["Project Overview & Motivation", "Data Overview", "📊 EDA", "📈 Trends", "📊 Sector Productivity", "📉 Employment Distribution", "💼 Sector GDP Trend", "📊 Model Overview", "📝 Prediction"])
-
-# ===============================
-# TAB 1: Project Overview & Motivation
-# ===============================
-if tab == "Project Overview & Motivation":
-    st.markdown("<h1>Project Overview & Motivation</h1>", unsafe_allow_html=True)
-
-    st.subheader("1. Problem Statement")
-    st.markdown("""
-    The imbalance in the structure of labour force participation and productivity performance between key economic sectors remains, despite Malaysia’s effort to continually upgrade labour market efficiency and sectoral productivity. Certain key sectors have shown relatively high employment participation with low productivity, while others contribute significantly to national output with fewer workers.
-    """)
-
-    st.subheader("2. Motivation of Project")
-    st.markdown("""
-    Different sectors contribute to Malaysian economic growth through a variety of means. While GDP can measure the performance of various sectors economically, a more accurate indicator of productivity is how well labour resources are used. This research project seeks to examine in detail the labour force status and productivity level by sector to help policymakers ensure strength in workforce allocation, productivity improvement, and sustainable economic growth.
-    """)
-
-    st.subheader("3. Project Objectives")
-    st.markdown("""
-    1. To develop a machine learning model that classifies employment sectors based on productivity indicators, working hours, labour force size, and GDP contribution.
-    2. To train and compare multiple classification models to identify the best performing algorithm.
-    3. To deploy the final model in the dashboard.
-    """)
-
-    st.subheader("4. Project Limitations")
-    st.markdown("""
-    Limitations of the current research include the reliance on secondary data from the **Department of Statistics Malaysia (DOSM)**, which may have some inconsistencies. Additionally, the accuracy of predictions depends on the available indicators and may vary over time.
-    """)
-
-# ===============================
-# TAB 2: Data Overview
-# ===============================
-if tab == "Data Overview":
-    st.markdown("<h1>Data Overview</h1>", unsafe_allow_html=True)
-    st.subheader("Data Sources")
-
-    # Display Data Sources and Description
-    st.markdown("""
-    - **Department of Statistics Malaysia (DOSM)** provided secondary data used in this study.
-    - The dataset includes information on employment, productivity, GDP, working hours, and other key variables.
-    """)
-
-    st.subheader("Data Structure and Features")
-    st.markdown("""
-    **Features**:
-    - **Date**: Year of the data.
-    - **Sector**: Employment sector.
-    - **GDP**: Gross domestic product.
-    - **Hours Worked**: Total hours worked.
-    - **Employment**: Number of employed persons in the sector.
-    - **Output per Hour**: Ratio of GDP to hours worked.
-    - **Output Employment**: Ratio of GDP to the number of employed persons.
-    """)
-
-    st.write(data.head())
-
-    # ===============================
-# TAB 2: Data Overview
-# ===============================
-if tab == "Data Overview":
-    st.markdown("<h1>Data Overview</h1>", unsafe_allow_html=True)
-    st.subheader("Data Sources")
-
-    # Display Data Sources and Description
-    st.markdown("""
-    - **Department of Statistics Malaysia (DOSM)** provided secondary data used in this study.
-    - The dataset includes information on employment, productivity, GDP, working hours, and other key variables.
-    """)
-
-    st.subheader("Data Structure and Features")
-    st.markdown("""
-    **Features**:
-    - **Date**: Year of the data.
-    - **Sector**: Employment sector (encoded as integers for machine learning).
-    - **GDP**: Gross domestic product.
-    - **Hours Worked**: Total hours worked.
-    - **Employment**: Number of employed persons in the sector.
-    - **Output per Hour**: Ratio of GDP to hours worked.
-    - **Output Employment**: Ratio of GDP to the number of employed persons.
-    """)
-
-    # Display the first few rows of the data
-    st.write(data.head())
-
-    # ==========================
-    # Sector Encoding Mapping
-    # ==========================
-    st.subheader("Sector Encoding Mapping")
-
-    # Here, we manually map the encoded values to their corresponding sector names
-    sector_mapping = {
-        0: 'Agriculture',
-        1: 'Manufacturing',
-        2: 'Services',
-        3: 'Construction',
-        4: 'Mining',
-        5: 'Others'
-    }
-
-      # Display user-friendly messages for each sector encoding
-    for encoded_value, sector_name in sector_mapping.items():
-        st.markdown(f"**Sector {encoded_value}** is **{sector_name}**")
-
+    y_encoded = encoder.fit_transform(y)
     
+    # Feature engineering and scaling
+    X = data[['gdp', 'employment', 'hours', 'output_per_hour', 'GDP_per_worker', 'log_GDP', 
+              'employed_employer_percentage', 'employed_employee_percentage', 
+              'employed_own_account_percentage', 'employed_unpaid_family_percentage']]
+    
+    # Train-test split (80% training, 20% testing)
+    X_train, X_test, y_train, y_test = train_test_split(X, y_encoded, test_size=0.2, random_state=42)
+    
+    # Replace infinite values with NaN and then handle them (fill with mean)
+    X_train.replace([np.inf, -np.inf], np.nan, inplace=True)
+    X_train.fillna(X_train.mean(), inplace=True)
 
+    # Scaling features: Fit the scaler on training data
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)  # Fit and transform the training data
+    
+    # Transform the test data with the fitted scaler
+    X_test_scaled = scaler.transform(X_test)  # Transform the test data with the fitted scaler
 
+    # Handling imbalanced data using SMOTE
+    smote = SMOTE(random_state=42)
+    X_train_sm, y_train_sm = smote.fit_resample(X_train_scaled, y_train)
+    
+    return X_train_sm, X_test_scaled, y_train_sm, y_test, encoder, scaler
 
-# ===============================
-# TAB 3: EDA (Exploratory Data Analysis)
-# ===============================
-if tab == "📊 EDA":
-    st.markdown("<h1>Exploratory Data Analysis (EDA)</h1>", unsafe_allow_html=True)
-    st.subheader("Correlation Matrix")
+# Train models
+def train_models(X_train_sm, y_train_sm):
+    models = {
+        "XGBoost": xgb.XGBClassifier(n_estimators=200, learning_rate=0.1, max_depth=3, random_state=42),
+        "Random Forest": RandomForestClassifier(n_estimators=200, random_state=42),
+        "Logistic Regression": LogisticRegression(max_iter=1000, random_state=42),
+        "SVM": SVC(kernel='rbf', probability=True, random_state=42)
+    }
+    
+    results = []
+    for name, model in models.items():
+        model.fit(X_train_sm, y_train_sm)
+        results.append((name, model))
+    
+    return results
 
-    # Key variables for correlation
-    key_vars = ['gdp', 'employment', 'hours', 'output_hour', 'output_employment']
+# Evaluate models and generate results
+def evaluate_models(models, X_test, y_test, encoder):
+    results = []
+    for name, model in models:
+        y_pred = model.predict(X_test)
+        accuracy = accuracy_score(y_test, y_pred)
+        report = classification_report(y_test, y_pred, output_dict=True)
 
-    # Correlation matrix
-    corr_matrix = data[key_vars].corr()
-    fig_corr = plt.figure(figsize=(8,6))
-    sns.heatmap(corr_matrix, annot=True, fmt=".2f", cmap="plasma")
-    plt.title("Correlation Heatmap")
-    st.pyplot(fig_corr)
+        # Metrics
+        acc = accuracy
+        mae = mean_absolute_error(y_test, y_pred)
+        rmse = np.sqrt(mean_squared_error(y_test, y_pred))
 
-# ===============================
-# TAB 4: Trends (Scatter Plots)
-# ===============================
-if tab == "📈 Trends":
-    st.markdown("<h1>Trends and Relationships</h1>", unsafe_allow_html=True)
-    st.subheader("Scatter Plots for Key Variables")
+        results.append({
+            "Model": name,
+            "Accuracy": acc,
+            "MAE": mae,
+            "RMSE": rmse,
+            "Precision (macro)": report['macro avg']['precision'],
+            "Recall (macro)": report['macro avg']['recall'],
+            "F1-Score (macro)": report['macro avg']['f1-score'],
+        })
+    
+    return pd.DataFrame(results)
 
+# Employment Distribution by Sector (Pie Chart)
+def plot_employment_distribution(data):
+    sector_emp_total = data.groupby('sector')['employment'].sum().sort_values(ascending=False)
+    fig_pie = px.pie(sector_emp_total, values=sector_emp_total.values, 
+                     names=sector_emp_total.index,
+                     title="Share of Total Employment by Sector")
+    st.plotly_chart(fig_pie)
+
+# Plot GDP Trend Over Time by Sector (Line Plot)
+def plot_gdp_trend_by_sector(data):
+    plt.figure(figsize=(12, 8))
+    sns.lineplot(data=data, x='date', y='gdp', hue='sector', marker='o')
+    plt.title('GDP Trend Over Time by Sector')
+    plt.xlabel('Date')
+    plt.ylabel('GDP')
+    plt.xticks(rotation=45)
+    plt.grid(True)
+    st.pyplot(plt)
+
+# Scatter Plots: GDP vs Other Features
+def plot_scatter_gdp_vs_other(data):
     x = data['gdp']
     y_employment = data['employment']
     y_hours = data['hours']
     y_output_hour = data['output_hour']
     y_output_emp = data['output_employment']
 
-    fig, axes = plt.subplots(1, 4, figsize=(20, 5))
+    plt.figure(figsize=(20, 5))
 
     # GDP vs Employment
-    axes[0].scatter(x, y_employment, color='steelblue', alpha=0.6, label='Observed Data')
+    plt.subplot(1, 4, 1)
+    plt.scatter(x, y_employment, color='steelblue', alpha=0.6, label='Observed Data')
     z = np.polyfit(x, y_employment, 1)
     p = np.poly1d(z)
-    axes[0].plot(x, p(x), color='darkred', linestyle='--', linewidth=2, label='Linear Fit')
-    axes[0].set_xlabel('GDP')
-    axes[0].set_ylabel('Employment')
-    axes[0].set_title('GDP vs Employment')
-    axes[0].legend()
-    axes[0].grid(True, alpha=0.3)
+    plt.plot(x, p(x), color='darkred', linestyle='--', linewidth=2, label='Linear Fit')
+    plt.xlabel('GDP')
+    plt.ylabel('Employment')
+    plt.title('GDP vs Employment')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
 
     # GDP vs Total Working Hours
-    axes[1].scatter(x, y_hours, color='green', alpha=0.6, label='Observed Data')
+    plt.subplot(1, 4, 2)
+    plt.scatter(x, y_hours, color='green', alpha=0.6, label='Observed Data')
     z = np.polyfit(x, y_hours, 1)
     p = np.poly1d(z)
-    axes[1].plot(x, p(x), color='darkred', linestyle='--', linewidth=2, label='Linear Fit')
-    axes[1].set_xlabel('GDP')
-    axes[1].set_ylabel('Total Working Hours')
-    axes[1].set_title('GDP vs Total Working Hours')
-    axes[1].legend()
-    axes[1].grid(True, alpha=0.3)
+    plt.plot(x, p(x), color='darkred', linestyle='--', linewidth=2, label='Linear Fit')
+    plt.xlabel('GDP')
+    plt.ylabel('Total Working Hours')
+    plt.title('GDP vs Total Working Hours')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
 
     # GDP vs Output per Hour
-    axes[2].scatter(x, y_output_hour, color='orange', alpha=0.6, label='Observed Data')
-    axes[2].set_xlabel('GDP')
-    axes[2].set_ylabel('Output per Hour')
-    axes[2].set_title('GDP vs Output per Hour')
-    axes[2].grid(True, alpha=0.3)
+    plt.subplot(1, 4, 3)
+    plt.scatter(x, y_output_hour, color='orange', alpha=0.6, label='Observed Data')
+    plt.xlabel('GDP')
+    plt.ylabel('Output per Hour')
+    plt.title('GDP vs Output per Hour')
+    plt.grid(True, alpha=0.3)
 
     # GDP vs Output per Employee
-    axes[3].scatter(x, y_output_emp, color='purple', alpha=0.6, label='Observed Data')
-    axes[3].set_xlabel('GDP')
-    axes[3].set_ylabel('Output per Employee')
-    axes[3].set_title('GDP vs Output per Employee')
-    axes[3].grid(True, alpha=0.3)
+    plt.subplot(1, 4, 4)
+    plt.scatter(x, y_output_emp, color='purple', alpha=0.6, label='Observed Data')
+    plt.xlabel('GDP')
+    plt.ylabel('Output per Employee')
+    plt.title('GDP vs Output per Employee')
+    plt.grid(True, alpha=0.3)
 
     plt.tight_layout()
-    st.pyplot(fig)
-
-# ===============================
-# TAB 5: Sector Productivity (Bar Chart)
-# ===============================
-if tab == "📊 Sector Productivity":
-    st.markdown("<h1>Sector Productivity</h1>", unsafe_allow_html=True)
-    st.subheader("Average Output per Hour by Sector")
-
-    # Calculate the average output per hour by sector
-    sector_productivity = data.groupby('sector')['output_hour'].mean().sort_values(ascending=False)
-
-    # Plot
-    sector_productivity.plot(kind='bar')
-    plt.title('Average Output per Hour by Sector')
-    plt.ylabel('Output per Hour')
     st.pyplot(plt)
 
-# ===============================
-# TAB 6: Employment Distribution (Pie Chart)
-# ===============================
-if tab == "📉 Employment Distribution":
-    st.markdown("<h1>Employment Distribution by Sector</h1>", unsafe_allow_html=True)
+# Correlation Heatmap
+def plot_heatmap(data):
+    key_vars = ['gdp', 'employment', 'hours', 'output_hour', 'output_employment']
+    corr_matrix = data[key_vars].corr()
+    st.write("Correlation Matrix:")
+    st.write(corr_matrix)
 
-    # Calculate total employment by sector
-    sector_emp_total = data.groupby('sector')['employment'].sum().sort_values(ascending=False)
-
-    # Plot Pie Chart
-    fig_pie = px.pie(sector_emp_total, values=sector_emp_total.values, names=sector_emp_total.index,
-                     title="Share of Total Employment by Sector")
-    st.plotly_chart(fig_pie)
-
-# ===============================
-# TAB 7: Sector GDP Trend (Line Plot)
-# ===============================
-if tab == "💼 Sector GDP Trend":
-    st.markdown("<h1>GDP Trend Over Time by Sector</h1>", unsafe_allow_html=True)
-
-    # Create a dictionary to map encoded labels back to original colors
-    original_colors_map = {
-        'agriculture': 'green',
-        'construction': 'red',
-        'manufacturing': 'orange',
-        'mining': 'yellow',
-        'overall': 'purple',
-        'services': 'blue'
-    }
-
-    # Plot GDP Trend by Sector
-    plt.figure(figsize=(10, 6))
-
-    for sector_name, color in original_colors_map.items():
-        sector_data = data[data['sector'] == sector_name]
-        sns.lineplot(data=sector_data, x='date', y='gdp', color=color, label=sector_name)
-
-    plt.title('GDP Trend Over Time by Sector')
-    plt.xlabel('Date')
-    plt.ylabel('GDP')
-    plt.legend(title='Sector', bbox_to_anchor=(1.05, 1), loc='upper left')
-    plt.grid(True)
+    plt.figure(figsize=(8,6))
+    sns.heatmap(corr_matrix, annot=True, fmt=".2f", cmap="plasma")
+    plt.title("Correlation Heatmap")
     st.pyplot(plt)
 
-# ===============================
-# TAB 8: Model Overview
-# ===============================
-if tab == "📊 Model Overview":
-    st.markdown("<h1>Model Overview and Performance</h1>", unsafe_allow_html=True)
+# Main function
+def main():
+    st.title("Interactive Employment Sector Prediction Dashboard")
     
-    st.markdown("""
-    The model classifies employment sectors based on indicators such as **productivity**, **working hours**, **labour force size**, and **GDP contribution**.
-    We have trained multiple models, including:
-    - **XGBoost** (for its high performance on structured data)
-    - **Random Forest**
-    - **Logistic Regression**
-    - **SVM**
-    """)
+    # Tabs
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "📊 EDA",
+        "📈 Trends",
+        "🤖 ML Results",
+        "🚰 Employment Predictions",
+        "ℹ️ About"
+    ])
     
-    st.markdown("### Model Evaluation:") 
+    # Load data and preprocess
+    data = load_data()
+    X_train_sm, X_test, y_train_sm, y_test, encoder, scaler = preprocess_data(data)
+    models = train_models(X_train_sm, y_train_sm)
+    model_results = evaluate_models(models, X_test, y_test, encoder)
     
-    # Evaluate and compare the performance of models (e.g., using accuracy and F1-score)
-    st.markdown("The models were evaluated based on metrics such as **accuracy**, **precision**, **recall**, and **F1-score**.")
-    
-    st.markdown("""
-    **Model Performance**:
-    - **XGBoost** outperforms others in terms of accuracy.
-    - **SVM** performs well in non-linear boundaries.
-    - **Random Forest** provides robustness in predictions across various conditions.
-    """)
+    # TAB 1: EDA (Exploratory Data Analysis)
+    with tab1:
+        st.header("📊 Descriptive Analysis")
+        
+        # Display Employment Distribution Pie Chart
+        plot_employment_distribution(data)
+        
+        # Display scatter plots for GDP vs other variables
+        plot_scatter_gdp_vs_other(data)
+        
+        # Display the heatmap
+        plot_heatmap(data)
 
-# ===============================
-# TAB 9: Prediction
-# ===============================
-if tab == "📝 Prediction":
-    st.markdown("<h1>Prediction</h1>", unsafe_allow_html=True)
-    st.subheader("Enter the economic indicators to predict the sector")
+    # TAB 2: Trends
+    with tab2:
+        st.header("📈 GDP Trends Over Time")
+        plot_gdp_trend_by_sector(data)
 
-    # User input for prediction
-    gdp_input = st.number_input("GDP (Billion USD)", min_value=0.0, max_value=5000.0, value=1000.0, step=100.0)
-    hours_input = st.number_input("Hours Worked", min_value=0, max_value=100, value=40)
-    employment_input = st.number_input("Employment Figures", min_value=0, max_value=1000000, value=500000)
-    output_hour_input = st.number_input("Output per Hour (units)", min_value=0.0, max_value=1000.0, value=150.0)
+    # TAB 3: ML Results (Model Evaluation)
+    with tab3:
+        st.header("🤖 Model Performance Results")
+        
+        # Show model performance comparison table
+        st.subheader("Model Performance Comparison")
+        st.write(model_results)
 
-    # Feature Engineering for Prediction
-    GDP_per_worker = gdp_input / employment_input if employment_input != 0 else 0
-    log_GDP = np.log(gdp_input + 1)  # Log transformation to handle skewness
+    # TAB 4: Employment Predictions
+    with tab4:
+        st.header("🚰 Predict Employment Sector")
 
-    # Prepare input data for prediction
-    input_data = np.array([[gdp_input, employment_input, hours_input, output_hour_input, GDP_per_worker, log_GDP]])
+        # User input fields
+        gdp_input = st.number_input("💰 Enter GDP (in Billion USD)", min_value=0.0, value=500.0)
+        employment_input = st.number_input("👥 Enter Employment", min_value=0, value=500000)
+        hours_input = st.number_input("⏰ Enter Total Working Hours", min_value=0, value=40)
 
-    # Scale the data
-    input_data_scaled = scaler.transform(input_data)
+        # Button to make prediction
+        if st.button("🔮 Predict Employment Sector"):
+            # Call the prediction function
+            predicted_sector = make_prediction(gdp_input, employment_input, hours_input)
 
-    if st.button("Predict Sector"):
-        # Use trained model for prediction
-        model = xgb.XGBClassifier(n_estimators=100, random_state=42)
-        model.fit(X_train_scaled, y_train)  # Use the pre-trained data
+            # Show the result to the user with some enhancements
+            st.markdown(f"""
+            ### 🎯 **Predicted Employment Sector:**
+            #### _{predicted_sector}_
 
-        # Prediction
-        prediction = model.predict(input_data_scaled)
-        predicted_sector = encoder.inverse_transform(prediction)[0]
-        st.markdown(f"### 🎯 **Predicted Employment Sector: {predicted_sector}**", unsafe_allow_html=True)
+            **Explanation:**
+            - This prediction was made based on the economic indicators you provided.
+            - The model uses historical data of GDP, employment, and working hours to predict the most likely sector for the given region.
 
-# ===============================
-# FOOTER
-# ===============================
-st.markdown("---")
-st.caption("💡 Streamlit Dashboard | Employment Sector Prediction | Machine Learning")
+            🔍 **Key Insights**:
+            - Employment in sectors like **{predicted_sector}** are influenced by these factors.
 
+            ✨ **Thank you for using our prediction tool!** We hope this helps in your decision-making process.
+            """)
 
+            # Option to make another prediction
+            st.markdown("#### 🔄 Would you like to make another prediction?")
+            if st.button("💬 Make Another Prediction"):
+                st.experimental_rerun()
 
+# Run the application
+if __name__ == "__main__":
+    main()
