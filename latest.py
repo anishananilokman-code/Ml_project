@@ -199,7 +199,7 @@ def plot_heatmap(data):
 
 # ── Main app ──────────────────────────────────────────────────────────
 def main():
-    st.title("Economic Sector Employment Prediction Dashboard")
+    st.title("EXPLORING LABOUR MARKET DYNAMICS: EMPLOYMENT BY MSIC IN MALAYSIA")
 
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "📊 EDA", "📈 Trends", "🤖 ML Results", "🚀 Prediction", "ℹ️ About"
@@ -272,3 +272,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
