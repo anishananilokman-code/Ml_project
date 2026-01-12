@@ -230,12 +230,11 @@ if tab == "Data Overview":
         5: 'Others'
     }
 
-    # Display the mapping in the app
-    st.write(sector_mapping)
+      # Display user-friendly messages for each sector encoding
+    for encoded_value, sector_name in sector_mapping.items():
+        st.markdown(f"**Sector {encoded_value}** is **{sector_name}**")
 
-    # Display the column names and first few rows of the data (to see if sector column is present)
-    st.write("Data Columns:")
-    st.write(data.columns)
+    
 
 
 
@@ -435,5 +434,6 @@ if tab == "📝 Prediction":
 # ===============================
 st.markdown("---")
 st.caption("💡 Streamlit Dashboard | Employment Sector Prediction | Machine Learning")
+
 
 
