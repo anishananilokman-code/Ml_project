@@ -19,20 +19,80 @@ st.set_page_config(
 )
 
 # ===============================
-# FILE UPLOAD
+# BACKGROUND & STYLING
+# ===============================
+def apply_custom_styles():
+    st.markdown(
+        """
+        <style>
+        .stApp {
+            background-color: #f3f4f6;  /* Light background color */
+            color: black; /* Black text color */
+        }
+        .stButton>button {
+            background-color: #0073e6;
+            color: white;
+            font-weight: bold;
+            border-radius: 10px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+            transition: background-color 0.3s ease;
+        }
+        .stButton>button:hover {
+            background-color: #005bb5;
+        }
+        .block-container {
+            background-color: rgba(255,255,255,0.92);
+            padding: 2rem;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .stTextInput>label {
+            font-size: 1rem;
+        }
+        .stSelectbox, .stMultiselect {
+            background-color: #ffffff;
+            border-radius: 5px;
+        }
+        .stMetric>label {
+            font-size: 1.2rem;
+        }
+        .stSidebar {
+            background-color: #2b2d42;
+        }
+        .stSidebar .sidebar-content a {
+            color: #fff;
+        }
+        .stTitle, .stSubheader {
+            color: #0073e6;
+            font-family: 'Arial', sans-serif;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+apply_custom_styles()
+
+# ===============================
+# MAIN TITLE
+# ===============================
+st.markdown("<h1 style='color: #0073e6;'>🏢 Employment Sector Prediction Dashboard</h1>", unsafe_allow_html=True)
+st.subheader("Predicting Employment Sectors based on Economic Indicators")
+st.caption("📊 GDP | 🏭 Productivity | 💼 Work Hours | 👥 Labor Force")
+
+# ===============================
+# FILE UPLOADER
 # ===============================
 uploaded_file = st.file_uploader("Upload CSV file", type="csv")
 
+# Check if the user uploaded a file
 if uploaded_file is not None:
-    # Load the uploaded CSV file
-    data = pd.read_csv(uploaded_file)
+    data = pd.read_csv(uploaded_file)  # Read the uploaded file
 
-    # Data Preprocessing and Visualization Code...
+    # Display the first few rows of the uploaded file
     st.write(data.head())
 
-    # ===============================
-    # Data Preprocessing
-    # ===============================
+    # Proceed with preprocessing and model
     def preprocess_data(data):
         # Feature Engineering Example:
         data['GDP_per_worker'] = data['gdp'] / data['employment']
@@ -63,78 +123,77 @@ if uploaded_file is not None:
 
     X_train_scaled, X_test_scaled, y_train, y_test, encoder, scaler = preprocess_data(data)
 
-    # ===============================
-    # NAVIGATION (Sidebar)
-    # ===============================
-    st.sidebar.title("Navigation")
-    tab = st.sidebar.radio("Go to", ["Project Overview & Motivation", "Data Overview", "📊 EDA", "📈 Trends", "📊 Sector Productivity", "📉 Employment Distribution", "💼 Sector GDP Trend", "📊 Model Overview", "📝 System Information"])
+    # Example Model Evaluation (XGBoost)
+    model = xgb.XGBClassifier(n_estimators=100, random_state=42)
+    model.fit(X_train_scaled, y_train)
+    y_pred = model.predict(X_test_scaled)
+
+    # Calculate Accuracy, Precision, Recall, and F1-score
+    accuracy = accuracy_score(y_test, y_pred)
+    precision = precision_score(y_test, y_pred, average='weighted')
+    recall = recall_score(y_test, y_pred, average='weighted')
+    f1 = f1_score(y_test, y_pred, average='weighted')
+
+    # Display the metrics
+    st.subheader("Model Performance")
+    st.write(f"Accuracy: {accuracy:.2f}")
+    st.write(f"Precision: {precision:.2f}")
+    st.write(f"Recall: {recall:.2f}")
+    st.write(f"F1-Score: {f1:.2f}")
+
+    # Model comparison (if multiple models are trained)
+    model_comparison = pd.DataFrame({
+        'Model': ['XGBoost'],
+        'Accuracy': [accuracy],
+        'Precision': [precision],
+        'Recall': [recall],
+        'F1-Score': [f1]
+    })
+    st.write(model_comparison)
 
     # ===============================
-    # TAB 1: Project Overview & Motivation
+    # VISUALIZE EDA (Correlation Heatmap)
     # ===============================
-    if tab == "Project Overview & Motivation":
-        st.markdown("<h1>Project Overview & Motivation</h1>", unsafe_allow_html=True)
-
-        st.subheader("1. Problem Statement")
-        st.markdown("""
-        The imbalance in the structure of labour force participation and productivity performance between key economic sectors remains, despite Malaysia’s effort to continually upgrade labour market efficiency and sectoral productivity. Certain key sectors have shown relatively high employment participation with low productivity, while others contribute significantly to national output with fewer workers.
-        """)
-
-        st.subheader("2. Motivation of Project")
-        st.markdown("""
-        Different sectors contribute to Malaysian economic growth through a variety of means. While GDP can measure the performance of various sectors economically, a more accurate indicator of productivity is how well labour resources are used. This research project seeks to examine in detail the labour force status and productivity level by sector to help policymakers ensure strength in workforce allocation, productivity improvement, and sustainable economic growth.
-        """)
-
-        st.subheader("3. Project Objectives")
-        st.markdown("""
-        1. To develop a machine learning model that classifies employment sectors based on productivity indicators, working hours, labour force size, and GDP contribution.
-        2. To train and compare multiple classification models to identify the best performing algorithm.
-        3. To deploy the final model in the dashboard.
-        """)
-
-        st.subheader("4. Project Limitations")
-        st.markdown("""
-        Limitations of the current research include the reliance on secondary data from the **Department of Statistics Malaysia (DOSM)**, which may have some inconsistencies. Additionally, the accuracy of predictions depends on the available indicators and may vary over time.
-        """)
+    st.subheader("Correlation Matrix")
+    key_vars = ['gdp', 'employment', 'hours', 'output_hour', 'output_employment']
+    corr_matrix = data[key_vars].corr()
+    fig_corr = plt.figure(figsize=(8,6))
+    sns.heatmap(corr_matrix, annot=True, fmt=".2f", cmap="plasma")
+    plt.title("Correlation Heatmap")
+    st.pyplot(fig_corr)
 
     # ===============================
-    # TAB 2: Data Overview
+    # PREDICTION (Interactive Prediction)
     # ===============================
-    if tab == "Data Overview":
-        st.markdown("<h1>Data Overview</h1>", unsafe_allow_html=True)
-        st.subheader("Data Sources")
+    st.subheader("Prediction")
+    gdp_input = st.sidebar.number_input("GDP (Billion USD)", min_value=0.0, max_value=5000.0, value=1000.0, step=100.0)
+    work_hours_input = st.sidebar.number_input("Average Work Hours", min_value=0, max_value=100, value=40, step=1)
+    employment_input = st.sidebar.number_input("Employment Figures", min_value=0, max_value=1000000, value=500000, step=5000)
+    output_per_hour_input = st.sidebar.number_input("Output per Hour (units)", min_value=0.0, max_value=1000.0, value=150.0, step=10.0)
 
-        # Display Data Sources and Description
-        st.markdown("""
-        - **Department of Statistics Malaysia (DOSM)** provided secondary data used in this study.
-        - The dataset includes information on employment, productivity, GDP, working hours, and other key variables.
-        """)
+    gdp_per_worker_input = gdp_input / employment_input if employment_input != 0 else 0
+    log_gdp_input = np.log(gdp_input + 1)
 
-        st.subheader("Data Structure and Features")
-        st.markdown("""
-        **Features**:
-        - **Date**: Year of the data.
-        - **Sector**: Employment sector.
-        - **GDP**: Gross domestic product.
-        - **Hours Worked**: Total hours worked.
-        - **Employment**: Number of employed persons in the sector.
-        - **Output per Hour**: Ratio of GDP to hours worked.
-        - **Output Employment**: Ratio of GDP to the number of employed persons.
-        """)
+    input_data = np.array([[gdp_input, employment_input, work_hours_input, output_per_hour_input, gdp_per_worker_input, log_gdp_input]])
+    input_data_scaled = scaler.transform(input_data)
 
-        st.write(data.head())
+    if st.sidebar.button("Predict Sector", key="predict_button"):
+        prediction = model.predict(input_data_scaled)
+        predicted_sector = encoder.inverse_transform(prediction)[0]
 
-    # ===============================
-    # TAB 3: EDA (Exploratory Data Analysis)
-    # ===============================
-    if tab == "📊 EDA":
-        st.markdown("<h1>Exploratory Data Analysis (EDA)</h1>", unsafe_allow_html=True)
-        st.subheader("Correlation Matrix")
+        st.markdown(f"### 🎯 Predicted Employment Sector: {predicted_sector}")
 
-        # Key variables for correlation
-        key_vars = ['gdp', 'employment', 'hours', 'output_hour', 'output_employment']
-
-        # Correlation matrix
-        corr_matrix = data[key_vars].corr()
-        fig_corr = plt.figure(figsize=(8,6))
-        sns.heatmap(corr_matrix,
+        # Visualize the prediction
+        st.subheader("Visualizing the Entered Data")
+        fig = plt.figure(figsize=(10, 6))
+        ax = fig.add_subplot(111)
+        data_for_plot = pd.DataFrame({
+            'Input Feature': ['GDP', 'Employment', 'Work Hours', 'Output per Hour'],
+            'Value': [gdp_input, employment_input, work_hours_input, output_per_hour_input]
+        })
+        ax.bar(data_for_plot['Input Feature'], data_for_plot['Value'], color=['#3498db', '#2ecc71', '#e74c3c', '#9b59b6'])
+        ax.set_title("Entered Economic Indicators", fontsize=16)
+        ax.set_ylabel("Value")
+        st.pyplot(fig)
+else:
+    st.write("Please upload a CSV file to proceed.")
