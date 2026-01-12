@@ -102,17 +102,19 @@ def preprocess_data(data):
     data['output_per_hour'] = data['output_hour'] / data['hours']
     data['log_GDP'] = np.log(data['gdp'] + 1)
 
-    # Label Encoding for sector (assuming sector is categorical)
-    encoder = LabelEncoder()
-    data['sector'] = encoder.fit_transform(data['sector'])
-
-    # Handle Infinite and NaN Values
-    data.replace([np.inf, -np.inf], np.nan, inplace=True)  # Replace infinite values with NaN
-    data.fillna(data.mean(), inplace=True)  # Replace NaN values with the mean of each column
 
     # Split data into features and target
     X = data[['gdp', 'employment', 'hours', 'output_per_hour', 'GDP_per_worker', 'log_GDP']]
     y = data['sector']
+
+    
+    # Label Encoding for sector (assuming sector is categorical)
+    encoder = LabelEncoder()
+    data['y'] = encoder.fit_transform(data['y'])
+
+    # Handle Infinite and NaN Values
+    data.replace([np.inf, -np.inf], np.nan, inplace=True)  # Replace infinite values with NaN
+    data.fillna(data.mean(), inplace=True)  # Replace NaN values with the mean of each column
 
     # Split into training and test sets
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
@@ -383,4 +385,5 @@ if tab == "📝 Prediction":
 # ===============================
 st.markdown("---")
 st.caption("💡 Streamlit Dashboard | Employment Sector Prediction | Machine Learning")
+
 
