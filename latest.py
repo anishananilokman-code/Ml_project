@@ -187,6 +187,58 @@ if tab == "Data Overview":
 
     st.write(data.head())
 
+    # ===============================
+# TAB 2: Data Overview
+# ===============================
+if tab == "Data Overview":
+    st.markdown("<h1>Data Overview</h1>", unsafe_allow_html=True)
+    st.subheader("Data Sources")
+
+    # Display Data Sources and Description
+    st.markdown("""
+    - **Department of Statistics Malaysia (DOSM)** provided secondary data used in this study.
+    - The dataset includes information on employment, productivity, GDP, working hours, and other key variables.
+    """)
+
+    st.subheader("Data Structure and Features")
+    st.markdown("""
+    **Features**:
+    - **Date**: Year of the data.
+    - **Sector**: Employment sector (encoded as integers for machine learning).
+    - **GDP**: Gross domestic product.
+    - **Hours Worked**: Total hours worked.
+    - **Employment**: Number of employed persons in the sector.
+    - **Output per Hour**: Ratio of GDP to hours worked.
+    - **Output Employment**: Ratio of GDP to the number of employed persons.
+    """)
+
+    # Display the first few rows of the data
+    st.write(data.head())
+
+    # ==========================
+    # Sector Encoding Mapping
+    # ==========================
+    st.subheader("Sector Encoding Mapping")
+
+    # Here, we manually map the encoded values to their corresponding sector names
+    sector_mapping = {
+        0: 'Agriculture',
+        1: 'Manufacturing',
+        2: 'Services',
+        3: 'Construction',
+        4: 'Mining',
+        5: 'Others'
+    }
+
+    # Display the mapping in the app
+    st.write(sector_mapping)
+
+    # Display the column names and first few rows of the data (to see if sector column is present)
+    st.write("Data Columns:")
+    st.write(data.columns)
+
+
+
 # ===============================
 # TAB 3: EDA (Exploratory Data Analysis)
 # ===============================
@@ -383,4 +435,5 @@ if tab == "📝 Prediction":
 # ===============================
 st.markdown("---")
 st.caption("💡 Streamlit Dashboard | Employment Sector Prediction | Machine Learning")
+
 
